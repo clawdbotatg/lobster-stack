@@ -1,81 +1,391 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import "./lobster.css";
 import { Address } from "@scaffold-ui/components";
-import type { NextPage } from "next";
-import { hardhat } from "viem/chains";
+import { formatUnits } from "viem";
 import { useAccount } from "wagmi";
-import { BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { useTargetNetwork } from "~~/hooks/scaffold-eth";
+import { useScaffoldEventHistory, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
-const Home: NextPage = () => {
+// Helper to format large CLAWD amounts
+function formatClawd(value: bigint | undefined): string {
+  if (!value) return "0";
+  const num = Number(formatUnits(value, 18));
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return num.toFixed(0);
+}
+
+function formatClawdFull(value: bigint | undefined): string {
+  if (!value) return "0";
+  return Number(formatUnits(value, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+export default function LobsterStackPage() {
   const { address: connectedAddress } = useAccount();
-  const { targetNetwork } = useTargetNetwork();
+
+  // ============ Read contract state ============
+  const { data: stackStats } = useScaffoldReadContract({
+    contractName: "LobsterStack",
+    functionName: "getStackStats",
+  });
+
+  const { data: entryCost } = useScaffoldReadContract({
+    contractName: "LobsterStack",
+    functionName: "entryCost",
+  });
+
+  const { data: clawdBalance } = useScaffoldReadContract({
+    contractName: "MockCLAWD",
+    functionName: "balanceOf",
+    args: [connectedAddress],
+    query: { enabled: !!connectedAddress },
+  });
+
+  const { data: userPositions } = useScaffoldReadContract({
+    contractName: "LobsterStack",
+    functionName: "getUserPositions",
+    args: [connectedAddress],
+    query: { enabled: !!connectedAddress },
+  });
+
+  const { data: unclaimedEarnings } = useScaffoldReadContract({
+    contractName: "LobsterStack",
+    functionName: "getUnclaimedEarnings",
+    args: [connectedAddress],
+    query: { enabled: !!connectedAddress },
+  });
+
+  // Get lobsters for display (latest 20)
+  const totalLobsters = stackStats ? stackStats[0] : 0n;
+  const displayOffset = totalLobsters > 20n ? totalLobsters - 20n : 0n;
+  const displayLimit = totalLobsters > 20n ? 20n : totalLobsters;
+
+  const { data: lobsterData } = useScaffoldReadContract({
+    contractName: "LobsterStack",
+    functionName: "getLobsters",
+    args: [displayOffset, displayLimit],
+    query: { enabled: totalLobsters > 0n },
+  });
+
+  // Event history
+  const { data: entryEvents } = useScaffoldEventHistory({
+    contractName: "LobsterStack",
+    eventName: "LobsterEntered",
+    fromBlock: 0n,
+    watch: true,
+  });
+
+  // ============ Write hooks ============
+  const { writeContractAsync: writeMockCLAWD, isMining: isCLAWDMining } = useScaffoldWriteContract("MockCLAWD");
+  const { writeContractAsync: writeLobsterStack, isMining: isStackMining } = useScaffoldWriteContract("LobsterStack");
+
+  // ============ Local UI state ============
+  const [isApproving, setIsApproving] = useState(false);
+  const [isEntering, setIsEntering] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [isMinting, setIsMinting] = useState(false);
+  const [approveDisableTimer, setApproveDisableTimer] = useState(false);
+  const [enterDisableTimer, setEnterDisableTimer] = useState(false);
+  const [claimDisableTimer, setClaimDisableTimer] = useState(false);
+
+  const isAnyMining = isCLAWDMining || isStackMining;
+
+  // For allowance, we need the actual LobsterStack contract address.
+  // The scaffold system knows it. Let's use the raw deployed contract address.
+  // We can get it by importing deployedContracts
+  const [lobsterStackAddr, setLobsterStackAddr] = useState<`0x${string}` | undefined>();
+
+  useEffect(() => {
+    // Get address from deployedContracts
+    import("~~/contracts/deployedContracts").then(mod => {
+      const contracts = mod.default;
+      const chain = contracts[31337 as keyof typeof contracts];
+      if (chain && "LobsterStack" in chain) {
+        setLobsterStackAddr((chain as any).LobsterStack.address as `0x${string}`);
+      }
+    });
+  }, []);
+
+  // Real allowance read with the actual contract address
+  const { data: realAllowance } = useScaffoldReadContract({
+    contractName: "MockCLAWD",
+    functionName: "allowance",
+    args: [connectedAddress, lobsterStackAddr],
+    query: { enabled: !!connectedAddress && !!lobsterStackAddr },
+  });
+
+  const hasEnoughAllowance = realAllowance !== undefined && entryCost !== undefined && realAllowance >= entryCost;
+  const hasEnoughBalance = clawdBalance !== undefined && entryCost !== undefined && clawdBalance >= entryCost;
+
+  // ============ Handlers ============
+  const handleMintTestTokens = async () => {
+    if (!connectedAddress) return;
+    setIsMinting(true);
+    try {
+      await writeMockCLAWD({
+        functionName: "mint",
+        args: [connectedAddress, BigInt("10000000000000000000000000")], // 10M CLAWD
+      });
+    } catch (e) {
+      console.error("Mint failed:", e);
+    } finally {
+      setIsMinting(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!lobsterStackAddr || !entryCost) return;
+    setIsApproving(true);
+    setApproveDisableTimer(true);
+    setTimeout(() => setApproveDisableTimer(false), 3000);
+    try {
+      await writeMockCLAWD({
+        functionName: "approve",
+        args: [lobsterStackAddr, entryCost],
+      });
+    } catch (e) {
+      console.error("Approve failed:", e);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleEnterStack = async () => {
+    setIsEntering(true);
+    setEnterDisableTimer(true);
+    setTimeout(() => setEnterDisableTimer(false), 3000);
+    try {
+      await writeLobsterStack({
+        functionName: "enterStack",
+      });
+    } catch (e) {
+      console.error("Enter failed:", e);
+    } finally {
+      setIsEntering(false);
+    }
+  };
+
+  const handleClaim = async () => {
+    setIsClaiming(true);
+    setClaimDisableTimer(true);
+    setTimeout(() => setClaimDisableTimer(false), 3000);
+    try {
+      await writeLobsterStack({
+        functionName: "claimEarnings",
+      });
+    } catch (e) {
+      console.error("Claim failed:", e);
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
+  // Parse stats
+  const stats = {
+    totalLobsters: stackStats ? Number(stackStats[0]) : 0,
+    entryCost: stackStats ? stackStats[1] : 0n,
+    totalBurned: stackStats ? stackStats[2] : 0n,
+    totalPaidOut: stackStats ? stackStats[3] : 0n,
+    rewardPool: stackStats ? stackStats[4] : 0n,
+  };
+
+  // Parse lobster data for display
+  const lobstersForDisplay = lobsterData
+    ? lobsterData[0].map((owner: string, i: number) => ({
+        owner: owner as `0x${string}`,
+        enteredAt: Number(lobsterData[1][i]),
+        position: Number(lobsterData[2][i]),
+        unclaimed: lobsterData[3][i],
+      }))
+    : [];
+
+  // Reverse so newest is on top
+  const lobstersReversed = [...lobstersForDisplay].reverse();
+
+  // Recent events (last 10)
+  const recentEvents = (entryEvents || []).slice(0, 10);
 
   return (
-    <>
-      <div className="flex items-center flex-col grow pt-10">
-        <div className="px-5">
-          <h1 className="text-center">
-            <span className="block text-2xl mb-2">Welcome to</span>
-            <span className="block text-4xl font-bold">Scaffold-ETH 2</span>
-          </h1>
-          <div className="flex justify-center items-center space-x-2 flex-col">
-            <p className="my-2 font-medium">Connected Address:</p>
-            <Address
-              address={connectedAddress}
-              chain={targetNetwork}
-              blockExplorerAddressLink={
-                targetNetwork.id === hardhat.id ? `/blockexplorer/address/${connectedAddress}` : undefined
-              }
-            />
-          </div>
+    <div className="lobster-page">
+      {/* Stats Bar */}
+      <div className="stats-bar">
+        <div className="stat-item">
+          <div className="stat-value">{stats.totalLobsters}</div>
+          <div className="stat-label">🦞 Lobsters</div>
+        </div>
+        <div className="stat-item">
+          <div className="stat-value stat-burn">{formatClawd(stats.totalBurned)}</div>
+          <div className="stat-label">🔥 Burned</div>
+        </div>
+        <div className="stat-item">
+          <div className="stat-value stat-gold">{formatClawd(stats.totalPaidOut)}</div>
+          <div className="stat-label">💰 Paid Out</div>
+        </div>
+        <div className="stat-item">
+          <div className="stat-value">{formatClawd(stats.entryCost)}</div>
+          <div className="stat-label">🎟️ Entry Cost</div>
+        </div>
+        <div className="stat-item">
+          <div className="stat-value stat-gold">{formatClawd(stats.rewardPool)}</div>
+          <div className="stat-label">🏆 Pool</div>
+        </div>
+      </div>
 
-          <p className="text-center text-lg">
-            Get started by editing{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/nextjs/app/page.tsx
-            </code>
-          </p>
-          <p className="text-center text-lg">
-            Edit your smart contract{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              YourContract.sol
-            </code>{" "}
-            in{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/hardhat/contracts
-            </code>
-          </p>
+      <div className="main-content">
+        {/* Left: Stack Visualization */}
+        <div className="stack-section">
+          <h2 className="section-title">The Stack</h2>
+          <div className="stack-container">
+            {lobstersReversed.length === 0 ? (
+              <div className="empty-stack">
+                <div className="empty-lobster">🦞</div>
+                <p>No lobsters yet. Be the first!</p>
+              </div>
+            ) : (
+              lobstersReversed.map((lob, i) => {
+                const isOwn = connectedAddress && lob.owner.toLowerCase() === connectedAddress.toLowerCase();
+                return (
+                  <div
+                    key={lob.position}
+                    className={`lobster-card ${isOwn ? "lobster-own" : ""} ${i === 0 ? "lobster-newest" : ""}`}
+                  >
+                    <span className="lobster-emoji">🦞</span>
+                    <span className="lobster-position">#{lob.position}</span>
+                    <span className="lobster-address">
+                      <Address address={lob.owner} />
+                    </span>
+                    <span className="lobster-earnings">{formatClawd(lob.unclaimed)} CLAWD</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
 
-        <div className="grow bg-base-300 w-full mt-16 px-8 py-12">
-          <div className="flex justify-center items-center gap-12 flex-col md:flex-row">
-            <div className="flex flex-col bg-base-100 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <BugAntIcon className="h-8 w-8 fill-secondary" />
-              <p>
-                Tinker with your smart contract using the{" "}
-                <Link href="/debug" passHref className="link">
-                  Debug Contracts
-                </Link>{" "}
-                tab.
-              </p>
+        {/* Right: Action + User panels */}
+        <div className="action-section">
+          {/* Action Panel */}
+          <div className="panel action-panel">
+            <h2 className="section-title">Enter the Stack</h2>
+
+            {connectedAddress && <div className="balance-display">Balance: {formatClawdFull(clawdBalance)} CLAWD</div>}
+
+            {!connectedAddress ? (
+              <p className="connect-prompt">Connect your wallet to enter</p>
+            ) : !hasEnoughBalance ? (
+              <div className="no-balance">
+                <p>You need {formatClawd(entryCost)} CLAWD to enter</p>
+                <button
+                  className="btn-action btn-mint"
+                  disabled={isMinting || isAnyMining}
+                  onClick={handleMintTestTokens}
+                >
+                  {isMinting ? "Minting..." : "Mint 10M Test CLAWD"}
+                </button>
+              </div>
+            ) : !hasEnoughAllowance ? (
+              <button
+                className="btn-action btn-approve"
+                disabled={isApproving || approveDisableTimer || isAnyMining}
+                onClick={handleApprove}
+              >
+                {isApproving ? (
+                  <>
+                    <span className="spinner" /> Approving...
+                  </>
+                ) : (
+                  `Approve ${formatClawd(entryCost)} CLAWD`
+                )}
+              </button>
+            ) : (
+              <button
+                className="btn-action btn-enter"
+                disabled={isEntering || enterDisableTimer || isAnyMining}
+                onClick={handleEnterStack}
+              >
+                {isEntering ? (
+                  <>
+                    <span className="spinner" /> Entering...
+                  </>
+                ) : (
+                  "Enter the Stack 🦞"
+                )}
+              </button>
+            )}
+
+            <div className="distribution-info">
+              <span>60% to stack</span>
+              <span>20% burned</span>
+              <span>15% treasury</span>
+              <span>5% pool</span>
             </div>
-            <div className="flex flex-col bg-base-100 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <MagnifyingGlassIcon className="h-8 w-8 fill-secondary" />
-              <p>
-                Explore your local transactions with the{" "}
-                <Link href="/blockexplorer" passHref className="link">
-                  Block Explorer
-                </Link>{" "}
-                tab.
-              </p>
+          </div>
+
+          {/* User Positions */}
+          {connectedAddress && userPositions && userPositions.length > 0 && (
+            <div className="panel positions-panel">
+              <h2 className="section-title">Your Positions</h2>
+              <div className="unclaimed-total">
+                <span className="unclaimed-label">Unclaimed Earnings</span>
+                <span className="unclaimed-value">{formatClawdFull(unclaimedEarnings)} CLAWD</span>
+              </div>
+              <div className="positions-list">
+                {userPositions.map(posId => (
+                  <div key={Number(posId)} className="position-item">
+                    <span className="position-number">🦞 #{Number(posId)}</span>
+                  </div>
+                ))}
+              </div>
+              {unclaimedEarnings && unclaimedEarnings > 0n && (
+                <button
+                  className="btn-action btn-claim"
+                  disabled={isClaiming || claimDisableTimer || isAnyMining}
+                  onClick={handleClaim}
+                >
+                  {isClaiming ? (
+                    <>
+                      <span className="spinner" /> Claiming...
+                    </>
+                  ) : (
+                    `Claim ${formatClawdFull(unclaimedEarnings)} CLAWD`
+                  )}
+                </button>
+              )}
             </div>
+          )}
+
+          {/* Recent Activity */}
+          <div className="panel activity-panel">
+            <h2 className="section-title">Recent Activity</h2>
+            {recentEvents.length === 0 ? (
+              <p className="no-activity">No entries yet</p>
+            ) : (
+              <div className="activity-list">
+                {recentEvents.map((event, i) => (
+                  <div key={i} className="activity-item">
+                    <span>🦞</span>
+                    <Address address={event.args.owner as `0x${string}`} />
+                    <span>entered at #{Number(event.args.position)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Info Section */}
+          <div className="panel info-panel">
+            <h2 className="section-title">How It Works</h2>
+            <ol className="how-it-works">
+              <li>Pay CLAWD to enter the stack</li>
+              <li>60% of each new entry goes to existing lobsters</li>
+              <li>20% is burned forever 🔥</li>
+              <li>Earlier positions earn from every future entry</li>
+              <li>Claim your earnings anytime</li>
+            </ol>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
-};
-
-export default Home;
+}

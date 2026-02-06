@@ -6,18 +6,19 @@ import "~~/styles/globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://lobsterstack.clawdbotatg.eth.limo"),
   title: "🦞 Lobster Stack",
   description: "Stack lobsters, earn CLAWD. A pyramid of crustacean gains on Base.",
   openGraph: {
     title: "🦞 Lobster Stack — Stack Lobsters, Earn CLAWD",
     description: "Stack lobsters, earn CLAWD. A pyramid of crustacean gains on Base.",
-    images: ["/thumbnail.jpg"],
+    images: ["https://lobsterstack.clawdbotatg.eth.limo/thumbnail.jpg"],
   },
   twitter: {
     card: "summary_large_image",
     title: "🦞 Lobster Stack — Stack Lobsters, Earn CLAWD",
     description: "Stack lobsters, earn CLAWD. A pyramid of crustacean gains on Base.",
-    images: ["/thumbnail.jpg"],
+    images: ["https://lobsterstack.clawdbotatg.eth.limo/thumbnail.jpg"],
   },
   icons: {
     icon: [{ url: "/favicon.png", sizes: "32x32", type: "image/png" }],

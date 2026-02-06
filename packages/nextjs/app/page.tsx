@@ -74,11 +74,11 @@ export default function LobsterStackPage() {
     query: { enabled: totalLobsters > 0n },
   });
 
-  // Event history
+  // Event history — use a recent block to avoid scanning all of Base history
   const { data: entryEvents } = useScaffoldEventHistory({
     contractName: "LobsterStack",
     eventName: "LobsterEntered",
-    fromBlock: 0n,
+    fromBlock: 41770000n,
     watch: true,
   });
 
@@ -103,15 +103,20 @@ export default function LobsterStackPage() {
   const [lobsterStackAddr, setLobsterStackAddr] = useState<`0x${string}` | undefined>();
 
   useEffect(() => {
-    // Get address from deployedContracts
+    // Get address from deployedContracts for the current target network
     import("~~/contracts/deployedContracts").then(mod => {
       const contracts = mod.default;
-      const chain = contracts[31337 as keyof typeof contracts];
-      if (chain && "LobsterStack" in chain) {
-        setLobsterStackAddr((chain as any).LobsterStack.address as `0x${string}`);
+      // Try current target network first, then fallback to any chain that has LobsterStack
+      const chainIds = [targetNetwork.id, 8453, 31337];
+      for (const cid of chainIds) {
+        const chain = contracts[cid as keyof typeof contracts];
+        if (chain && "LobsterStack" in chain) {
+          setLobsterStackAddr((chain as any).LobsterStack.address as `0x${string}`);
+          break;
+        }
       }
     });
-  }, []);
+  }, [targetNetwork.id]);
 
   // Real allowance read with the actual contract address
   const { data: realAllowance } = useScaffoldReadContract({

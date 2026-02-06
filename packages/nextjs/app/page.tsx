@@ -23,12 +23,32 @@ function formatClawdFull(value: bigint | undefined): string {
   return Number(formatUnits(value, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
+function formatUsd(clawd: bigint | undefined, price: number | null): string {
+  if (!clawd || !price) return "";
+  const usd = Number(formatUnits(clawd, 18)) * price;
+  if (usd < 0.01) return "";
+  if (usd >= 1000) return `(~$${(usd / 1000).toFixed(1)}K)`;
+  return `(~$${usd.toFixed(2)})`;
+}
+
 export default function LobsterStackPage() {
   const { address: connectedAddress, chain } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const targetNetwork = scaffoldConfig.targetNetworks[0];
   const isWrongNetwork = connectedAddress && chain && chain.id !== targetNetwork.id;
   const [isSwitching, setIsSwitching] = useState(false);
+  const [clawdPrice, setClawdPrice] = useState<number | null>(null);
+
+  // Fetch CLAWD price from DexScreener
+  useEffect(() => {
+    fetch("https://api.dexscreener.com/latest/dex/tokens/0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07")
+      .then(r => r.json())
+      .then(d => {
+        const p = d?.pairs?.[0]?.priceUsd;
+        if (p) setClawdPrice(parseFloat(p));
+      })
+      .catch(() => {});
+  }, []);
 
   // ============ Read contract state ============
   const { data: stackStats } = useScaffoldReadContract({
@@ -280,7 +300,7 @@ export default function LobsterStackPage() {
           <div className="panel action-panel">
             <h2 className="section-title">Enter the Stack</h2>
 
-            {connectedAddress && <div className="balance-display">Balance: {formatClawdFull(clawdBalance)} CLAWD</div>}
+            {connectedAddress && <div className="balance-display">Balance: {formatClawdFull(clawdBalance)} CLAWD {formatUsd(clawdBalance, clawdPrice)}</div>}
 
             {!connectedAddress ? (
               <p className="connect-prompt">Connect your wallet to enter</p>
@@ -309,7 +329,7 @@ export default function LobsterStackPage() {
               </button>
             ) : !hasEnoughBalance ? (
               <div className="no-balance">
-                <p>You need {formatClawd(entryCost)} CLAWD to enter</p>
+                <p>You need {formatClawd(entryCost)} CLAWD {formatUsd(entryCost, clawdPrice)} to enter</p>
                 {targetNetwork.id === 31337 && (
                   <button
                     className="btn-action btn-mint"
@@ -374,7 +394,7 @@ export default function LobsterStackPage() {
               <h2 className="section-title">Your Positions</h2>
               <div className="unclaimed-total">
                 <span className="unclaimed-label">Unclaimed Earnings</span>
-                <span className="unclaimed-value">{formatClawdFull(unclaimedEarnings)} CLAWD</span>
+                <span className="unclaimed-value">{formatClawdFull(unclaimedEarnings)} CLAWD {formatUsd(unclaimedEarnings, clawdPrice)}</span>
               </div>
               <div className="positions-list">
                 {userPositions.map(posId => (

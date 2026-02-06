@@ -1,4 +1,3 @@
-// Polyfill localStorage for Node 25+ builds
 if (typeof globalThis.localStorage !== "undefined" && typeof globalThis.localStorage.getItem !== "function") {
   const store = new Map();
   globalThis.localStorage = {

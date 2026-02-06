@@ -342,7 +342,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 41772703,
+      deployedOnBlock: 41772882,
     },
     LobsterStack: {
       address: "0x2f8a34bb1721684658827b3aa72ef8260d5bbbbb",
@@ -1079,7 +1079,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 41772704,
+      deployedOnBlock: 41772883,
     },
   },
 } as const;

@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import "./lobster.css";
 import { Address } from "@scaffold-ui/components";
 import { formatUnits } from "viem";
-import { useAccount } from "wagmi";
+import { base } from "viem/chains";
+import { useAccount, useSwitchChain } from "wagmi";
 import { useScaffoldEventHistory, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import scaffoldConfig from "~~/scaffold.config";
 
 // Helper to format large CLAWD amounts
 function formatClawd(value: bigint | undefined): string {
@@ -22,7 +24,11 @@ function formatClawdFull(value: bigint | undefined): string {
 }
 
 export default function LobsterStackPage() {
-  const { address: connectedAddress } = useAccount();
+  const { address: connectedAddress, chain } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const targetNetwork = scaffoldConfig.targetNetworks[0];
+  const isWrongNetwork = connectedAddress && chain && chain.id !== targetNetwork.id;
+  const [isSwitching, setIsSwitching] = useState(false);
 
   // ============ Read contract state ============
   const { data: stackStats } = useScaffoldReadContract({
@@ -36,7 +42,7 @@ export default function LobsterStackPage() {
   });
 
   const { data: clawdBalance } = useScaffoldReadContract({
-    contractName: "MockCLAWD",
+    contractName: "CLAWD",
     functionName: "balanceOf",
     args: [connectedAddress],
     query: { enabled: !!connectedAddress },
@@ -77,7 +83,7 @@ export default function LobsterStackPage() {
   });
 
   // ============ Write hooks ============
-  const { writeContractAsync: writeMockCLAWD, isMining: isCLAWDMining } = useScaffoldWriteContract("MockCLAWD");
+  const { writeContractAsync: writeCLAWD, isMining: isCLAWDMining } = useScaffoldWriteContract("CLAWD");
   const { writeContractAsync: writeLobsterStack, isMining: isStackMining } = useScaffoldWriteContract("LobsterStack");
 
   // ============ Local UI state ============
@@ -109,7 +115,7 @@ export default function LobsterStackPage() {
 
   // Real allowance read with the actual contract address
   const { data: realAllowance } = useScaffoldReadContract({
-    contractName: "MockCLAWD",
+    contractName: "CLAWD",
     functionName: "allowance",
     args: [connectedAddress, lobsterStackAddr],
     query: { enabled: !!connectedAddress && !!lobsterStackAddr },
@@ -123,7 +129,7 @@ export default function LobsterStackPage() {
     if (!connectedAddress) return;
     setIsMinting(true);
     try {
-      await writeMockCLAWD({
+      await writeCLAWD({
         functionName: "mint",
         args: [connectedAddress, BigInt("10000000000000000000000000")], // 10M CLAWD
       });
@@ -140,7 +146,7 @@ export default function LobsterStackPage() {
     setApproveDisableTimer(true);
     setTimeout(() => setApproveDisableTimer(false), 3000);
     try {
-      await writeMockCLAWD({
+      await writeCLAWD({
         functionName: "approve",
         args: [lobsterStackAddr, entryCost],
       });
@@ -273,16 +279,51 @@ export default function LobsterStackPage() {
 
             {!connectedAddress ? (
               <p className="connect-prompt">Connect your wallet to enter</p>
+            ) : isWrongNetwork ? (
+              <button
+                className="btn-action btn-enter"
+                disabled={isSwitching || isAnyMining}
+                onClick={async () => {
+                  setIsSwitching(true);
+                  try {
+                    await switchChainAsync({ chainId: targetNetwork.id });
+                  } catch (e) {
+                    console.error("Switch failed:", e);
+                  } finally {
+                    setIsSwitching(false);
+                  }
+                }}
+              >
+                {isSwitching ? (
+                  <>
+                    <span className="spinner" /> Switching...
+                  </>
+                ) : (
+                  `Switch to ${targetNetwork.name}`
+                )}
+              </button>
             ) : !hasEnoughBalance ? (
               <div className="no-balance">
                 <p>You need {formatClawd(entryCost)} CLAWD to enter</p>
-                <button
-                  className="btn-action btn-mint"
-                  disabled={isMinting || isAnyMining}
-                  onClick={handleMintTestTokens}
-                >
-                  {isMinting ? "Minting..." : "Mint 10M Test CLAWD"}
-                </button>
+                {targetNetwork.id === 31337 && (
+                  <button
+                    className="btn-action btn-mint"
+                    disabled={isMinting || isAnyMining}
+                    onClick={handleMintTestTokens}
+                  >
+                    {isMinting ? "Minting..." : "Mint 10M Test CLAWD"}
+                  </button>
+                )}
+                {targetNetwork.id !== 31337 && (
+                  <a
+                    href="https://app.uniswap.org/swap?outputCurrency=0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07&chain=base"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-action btn-mint"
+                  >
+                    Get $CLAWD on Uniswap ↗
+                  </a>
+                )}
               </div>
             ) : !hasEnoughAllowance ? (
               <button

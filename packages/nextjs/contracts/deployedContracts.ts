@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   31337: {
     MockCLAWD: {
-      address: "0x25d23b63f166ec74b87b40cbcc5548d29576c56c",
+      address: "0x2a013c39d3cf9fcfa2d9d27895db60f73d5ddf9d",
       abi: [
         {
           type: "constructor",
@@ -342,10 +342,10 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 41772882,
+      deployedOnBlock: 41774116,
     },
     LobsterStack: {
-      address: "0x2f8a34bb1721684658827b3aa72ef8260d5bbbbb",
+      address: "0xe4b6c1483c974c5cdae0a6d42b2a1b252a7324a8",
       abi: [
         {
           type: "constructor",
@@ -1079,7 +1079,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 41772883,
+      deployedOnBlock: 41774117,
     },
   },
 } as const;

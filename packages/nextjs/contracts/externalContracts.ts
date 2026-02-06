@@ -92,7 +92,7 @@ const ERC20_ABI = [
 const externalContracts = {
   31337: {
     CLAWD: {
-      address: "0x25D23b63F166eC74b87b40cbCC5548D29576c56C",
+      address: "0x2A013C39D3CF9FcFa2d9D27895Db60f73d5DDF9D",
       abi: ERC20_ABI,
     },
   },

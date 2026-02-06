@@ -35,7 +35,7 @@ contract DeployLobsterStack is ScaffoldETHDeploy {
             mockClawd.mint(deployer, 1_000_000_000 * 1e18);
             console.log("Minted 1B CLAWD to deployer:", deployer);
 
-            // Export both contracts
+            // Export contracts
             deployments.push(Deployment("MockCLAWD", address(mockClawd)));
             deployments.push(Deployment("LobsterStack", address(stack)));
         } else if (block.chainid == 8453) {

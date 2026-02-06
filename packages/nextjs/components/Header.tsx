@@ -81,7 +81,7 @@ export const Header = () => {
             <Image alt="SE2 logo" className="cursor-pointer" fill src="/logo.svg" />
           </div>
           <div className="flex flex-col">
-            <span className="font-bold leading-tight">🦞 Lobster Stack</span>
+            <span className="font-bold leading-tight">🦞 Lobster Tower</span>
             <span className="text-xs">Stack lobsters, earn CLAWD</span>
           </div>
         </Link>

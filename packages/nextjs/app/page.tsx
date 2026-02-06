@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import "./lobster.css";
 import { Address } from "@scaffold-ui/components";
-import { formatUnits } from "viem";
-import { base } from "viem/chains";
+import { formatUnits, keccak256, encodePacked, toHex } from "viem";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useAccount, useSwitchChain } from "wagmi";
 import { useScaffoldEventHistory, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
@@ -32,7 +31,14 @@ function formatUsd(clawd: bigint | undefined, price: number | null): string {
   return `(~$${usd.toFixed(2)})`;
 }
 
-export default function LobsterStackPage() {
+// Generate a random bytes32
+function randomBytes32(): `0x${string}` {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return toHex(arr) as `0x${string}`;
+}
+
+export default function LobsterTowerPage() {
   const { address: connectedAddress, chain } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const { openConnectModal } = useConnectModal();
@@ -40,6 +46,13 @@ export default function LobsterStackPage() {
   const isWrongNetwork = connectedAddress && chain && chain.id !== targetNetwork.id;
   const [isSwitching, setIsSwitching] = useState(false);
   const [clawdPrice, setClawdPrice] = useState<number | null>(null);
+
+  // Commit-reveal state
+  const [pendingReveal, setPendingReveal] = useState<{ positionId: bigint; reveal: `0x${string}` } | null>(null);
+  const [toppleCheckResult, setToppleCheckResult] = useState<{ winner: boolean; roll: number; blocksLeft: number } | null>(null);
+  const [isCheckingTopple, setIsCheckingTopple] = useState(false);
+  const [isToppling, setIsToppling] = useState(false);
+  const [toppleAnimation, setToppleAnimation] = useState(false);
 
   // Fetch CLAWD price from DexScreener
   useEffect(() => {
@@ -53,13 +66,13 @@ export default function LobsterStackPage() {
   }, []);
 
   // ============ Read contract state ============
-  const { data: stackStats } = useScaffoldReadContract({
-    contractName: "LobsterStack",
-    functionName: "getStackStats",
+  const { data: towerStats } = useScaffoldReadContract({
+    contractName: "LobsterTower",
+    functionName: "getTowerStats",
   });
 
   const { data: entryCost } = useScaffoldReadContract({
-    contractName: "LobsterStack",
+    contractName: "LobsterTower",
     functionName: "entryCost",
   });
 
@@ -71,111 +84,106 @@ export default function LobsterStackPage() {
   });
 
   const { data: userPositions } = useScaffoldReadContract({
-    contractName: "LobsterStack",
+    contractName: "LobsterTower",
     functionName: "getUserPositions",
     args: [connectedAddress],
     query: { enabled: !!connectedAddress },
   });
 
   const { data: unclaimedEarnings } = useScaffoldReadContract({
-    contractName: "LobsterStack",
+    contractName: "LobsterTower",
     functionName: "getUnclaimedEarnings",
     args: [connectedAddress],
     query: { enabled: !!connectedAddress },
   });
 
-  // Get lobsters for display (latest 20)
-  const totalLobsters = stackStats ? stackStats[0] : 0n;
-  const displayOffset = totalLobsters > 20n ? totalLobsters - 20n : 0n;
-  const displayLimit = totalLobsters > 20n ? 20n : totalLobsters;
-
-  const { data: lobsterData } = useScaffoldReadContract({
-    contractName: "LobsterStack",
-    functionName: "getLobsters",
-    args: [displayOffset, displayLimit],
-    query: { enabled: totalLobsters > 0n },
+  // Event history
+  const { data: entryEvents } = useScaffoldEventHistory({
+    contractName: "LobsterTower",
+    eventName: "LobsterPlaced",
+    fromBlock: 42500000n,
+    watch: true,
   });
 
-  // Event history — use a recent block to avoid scanning all of Base history
-  const { data: entryEvents } = useScaffoldEventHistory({
-    contractName: "LobsterStack",
-    eventName: "LobsterEntered",
-    fromBlock: 41775750n,
+  const { data: toppleEvents } = useScaffoldEventHistory({
+    contractName: "LobsterTower",
+    eventName: "TowerToppled",
+    fromBlock: 42500000n,
     watch: true,
   });
 
   // ============ Write hooks ============
   const { writeContractAsync: writeCLAWD, isMining: isCLAWDMining } = useScaffoldWriteContract("CLAWD");
-  const { writeContractAsync: writeLobsterStack, isMining: isStackMining } = useScaffoldWriteContract("LobsterStack");
+  const { writeContractAsync: writeLobsterTower, isMining: isTowerMining } = useScaffoldWriteContract("LobsterTower");
 
   // ============ Local UI state ============
   const [isApproving, setIsApproving] = useState(false);
   const [isEntering, setIsEntering] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
-  const [isMinting, setIsMinting] = useState(false);
   const [approveDisableTimer, setApproveDisableTimer] = useState(false);
   const [enterDisableTimer, setEnterDisableTimer] = useState(false);
   const [claimDisableTimer, setClaimDisableTimer] = useState(false);
 
-  const isAnyMining = isCLAWDMining || isStackMining;
+  const isAnyMining = isCLAWDMining || isTowerMining;
 
-  // For allowance, we need the actual LobsterStack contract address.
-  // The scaffold system knows it. Let's use the raw deployed contract address.
-  // We can get it by importing deployedContracts
-  const [lobsterStackAddr, setLobsterStackAddr] = useState<`0x${string}` | undefined>();
+  // Get LobsterTower address for allowance check
+  const [towerAddr, setTowerAddr] = useState<`0x${string}` | undefined>();
 
   useEffect(() => {
-    // Get address from deployedContracts for the current target network
     import("~~/contracts/deployedContracts").then(mod => {
       const contracts = mod.default;
-      // Try current target network first, then fallback to any chain that has LobsterStack
       const chainIds = [targetNetwork.id, 8453, 31337];
       for (const cid of chainIds) {
-        const chain = contracts[cid as keyof typeof contracts];
-        if (chain && "LobsterStack" in chain) {
-          setLobsterStackAddr((chain as any).LobsterStack.address as `0x${string}`);
+        const c = contracts[cid as keyof typeof contracts];
+        if (c && "LobsterTower" in c) {
+          setTowerAddr((c as any).LobsterTower.address as `0x${string}`);
           break;
         }
       }
     });
   }, [targetNetwork.id]);
 
-  // Real allowance read with the actual contract address
+  // Real allowance read
   const { data: realAllowance } = useScaffoldReadContract({
     contractName: "CLAWD",
     functionName: "allowance",
-    args: [connectedAddress, lobsterStackAddr],
-    query: { enabled: !!connectedAddress && !!lobsterStackAddr },
+    args: [connectedAddress, towerAddr],
+    query: { enabled: !!connectedAddress && !!towerAddr },
   });
 
   const hasEnoughAllowance = realAllowance !== undefined && entryCost !== undefined && realAllowance >= entryCost;
   const hasEnoughBalance = clawdBalance !== undefined && entryCost !== undefined && clawdBalance >= entryCost;
 
-  // ============ Handlers ============
-  const handleMintTestTokens = async () => {
-    if (!connectedAddress) return;
-    setIsMinting(true);
-    try {
-      await writeCLAWD({
-        functionName: "mint",
-        args: [connectedAddress, BigInt("10000000000000000000000000")], // 10M CLAWD
-      });
-    } catch (e) {
-      console.error("Mint failed:", e);
-    } finally {
-      setIsMinting(false);
-    }
-  };
+  // ============ Check topple after entry ============
+  const { data: fullCheckData } = useScaffoldReadContract({
+    contractName: "LobsterTower",
+    functionName: "fullCheck",
+    args: [pendingReveal?.positionId, pendingReveal?.reveal],
+    query: { enabled: !!pendingReveal },
+  });
 
+  useEffect(() => {
+    if (fullCheckData && pendingReveal) {
+      const [winner, roll, , blocksRemaining] = fullCheckData;
+      setToppleCheckResult({
+        winner: winner as boolean,
+        roll: Number(roll),
+        blocksLeft: Number(blocksRemaining),
+      });
+      setIsCheckingTopple(false);
+    }
+  }, [fullCheckData, pendingReveal]);
+
+  // ============ Handlers ============
   const handleApprove = async () => {
-    if (!lobsterStackAddr || !entryCost) return;
+    if (!towerAddr || !entryCost) return;
     setIsApproving(true);
     setApproveDisableTimer(true);
     setTimeout(() => setApproveDisableTimer(false), 3000);
     try {
       await writeCLAWD({
         functionName: "approve",
-        args: [lobsterStackAddr, entryCost],
+        args: [towerAddr, entryCost],
       });
     } catch (e) {
       console.error("Approve failed:", e);
@@ -184,18 +192,87 @@ export default function LobsterStackPage() {
     }
   };
 
-  const handleEnterStack = async () => {
+  const handleEnterTower = async () => {
     setIsEntering(true);
     setEnterDisableTimer(true);
     setTimeout(() => setEnterDisableTimer(false), 3000);
+    setToppleCheckResult(null);
+    setPendingReveal(null);
+    setToppleAnimation(false);
+
     try {
-      await writeLobsterStack({
-        functionName: "enterStack",
+      // 1. Generate random reveal
+      const reveal = randomBytes32();
+
+      // 2. Compute commit on-chain via the contract's helper
+      // Actually, we need the commit before sending the tx, so compute locally
+      // keccak256(abi.encodePacked(reveal)) — for bytes32, this is just keccak256(reveal)
+      const commit = keccak256(reveal);
+
+      // 3. Enter the tower
+      await writeLobsterTower({
+        functionName: "enterTower",
+        args: [commit],
       });
+
+      // 4. Get the position ID (latest nextLobsterId)
+      // We'll read it after tx confirms — the scaffold hook already waited
+      // Use the latest total lobsters from the refreshed state
+      // For now, set pending reveal — the position will be read from userPositions on next render
+      setIsCheckingTopple(true);
+
+      // Small delay for state to propagate, then get position
+      setTimeout(async () => {
+        try {
+          // The position ID is the last one in userPositions after the tx
+          // We need a fresh read — but scaffold auto-polls. Use the nextLobsterId approach
+          const rpcUrl = targetNetwork.rpcUrls?.default?.http?.[0] || `https://mainnet.base.org`;
+          const resp = await fetch(rpcUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "eth_call",
+              params: [{
+                to: towerAddr,
+                data: "0xce6c3bba" // nextLobsterId() selector
+              }, "latest"]
+            })
+          });
+          const data = await resp.json();
+          const posId = BigInt(data.result);
+          setPendingReveal({ positionId: posId, reveal });
+        } catch (e) {
+          console.error("Failed to get position ID:", e);
+          setIsCheckingTopple(false);
+        }
+      }, 2000);
+
     } catch (e) {
       console.error("Enter failed:", e);
+      setIsCheckingTopple(false);
     } finally {
       setIsEntering(false);
+    }
+  };
+
+  const handleTopple = async () => {
+    if (!pendingReveal) return;
+    setIsToppling(true);
+    try {
+      await writeLobsterTower({
+        functionName: "topple",
+        args: [pendingReveal.positionId, pendingReveal.reveal],
+      });
+      setToppleAnimation(true);
+      setTimeout(() => setToppleAnimation(false), 5000);
+    } catch (e) {
+      console.error("Topple failed:", e);
+    } finally {
+      setIsToppling(false);
+      setPendingReveal(null);
+      setToppleCheckResult(null);
     }
   };
 
@@ -204,7 +281,7 @@ export default function LobsterStackPage() {
     setClaimDisableTimer(true);
     setTimeout(() => setClaimDisableTimer(false), 3000);
     try {
-      await writeLobsterStack({
+      await writeLobsterTower({
         functionName: "claimEarnings",
       });
     } catch (e) {
@@ -216,36 +293,38 @@ export default function LobsterStackPage() {
 
   // Parse stats
   const stats = {
-    totalLobsters: stackStats ? Number(stackStats[0]) : 0,
-    entryCost: stackStats ? stackStats[1] : 0n,
-    totalBurned: stackStats ? stackStats[2] : 0n,
-    totalPaidOut: stackStats ? stackStats[3] : 0n,
-    rewardPool: stackStats ? stackStats[4] : 0n,
+    height: towerStats ? Number(towerStats[0]) : 0,
+    round: towerStats ? Number(towerStats[1]) : 0,
+    pot: towerStats ? towerStats[2] : 0n,
+    entryCost: towerStats ? towerStats[3] : 0n,
+    totalBurned: towerStats ? towerStats[4] : 0n,
+    totalPaidOut: towerStats ? towerStats[5] : 0n,
+    totalToppled: towerStats ? Number(towerStats[6]) : 0,
   };
 
-  // Parse lobster data for display
-  const lobstersForDisplay = lobsterData
-    ? lobsterData[0].map((owner: string, i: number) => ({
-        owner: owner as `0x${string}`,
-        enteredAt: Number(lobsterData[1][i]),
-        position: Number(lobsterData[2][i]),
-        unclaimed: lobsterData[3][i],
-      }))
-    : [];
-
-  // Reverse so newest is on top
-  const lobstersReversed = [...lobstersForDisplay].reverse();
-
   // Recent events (last 10)
-  const recentEvents = (entryEvents || []).slice(0, 10);
+  const recentEntries = (entryEvents || []).slice(0, 10);
+  const recentTopples = (toppleEvents || []).slice(0, 5);
 
   return (
     <div className="lobster-page">
+      {/* Topple Animation Overlay */}
+      {toppleAnimation && (
+        <div className="topple-overlay">
+          <div className="topple-text">🌊 TOWER TOPPLED! 🌊</div>
+          <div className="topple-lobsters">🦞🦞🦞💥🦞🦞🦞</div>
+        </div>
+      )}
+
       {/* Stats Bar */}
       <div className="stats-bar">
         <div className="stat-item">
-          <div className="stat-value">{stats.totalLobsters}</div>
-          <div className="stat-label">🦞 Lobsters</div>
+          <div className="stat-value">{stats.height}</div>
+          <div className="stat-label">🦞 Tower Height</div>
+        </div>
+        <div className="stat-item">
+          <div className="stat-value stat-gold">{formatClawd(stats.pot)} {formatUsd(stats.pot, clawdPrice)}</div>
+          <div className="stat-label">💣 Topple Pot</div>
         </div>
         <div className="stat-item">
           <div className="stat-value stat-burn">{formatClawd(stats.totalBurned)}</div>
@@ -256,56 +335,70 @@ export default function LobsterStackPage() {
           <div className="stat-label">💰 Paid Out</div>
         </div>
         <div className="stat-item">
-          <div className="stat-value">{formatClawd(stats.entryCost)}</div>
-          <div className="stat-label">🎟️ Entry Cost</div>
+          <div className="stat-value">{stats.totalToppled}</div>
+          <div className="stat-label">🌊 Times Toppled</div>
+        </div>
+        <div className="stat-item">
+          <div className="stat-value">Round {stats.round}</div>
+          <div className="stat-label">🏁 Current Round</div>
         </div>
       </div>
 
       <div className="main-content">
-        {/* Left: Stack Visualization */}
+        {/* Left: Tower Visualization */}
         <div className="stack-section">
-          <h2 className="section-title">The Stack</h2>
+          <h2 className="section-title">The Tower</h2>
           <div className="stack-container">
-            {lobstersReversed.length === 0 ? (
+            {stats.height === 0 ? (
               <div className="empty-stack">
                 <div className="empty-lobster">🦞</div>
-                <p>No lobsters yet. Be the first!</p>
+                <p>Tower is empty. Be the first to stack!</p>
               </div>
             ) : (
-              lobstersReversed.map((lob, i) => {
-                const isOwn = connectedAddress && lob.owner.toLowerCase() === connectedAddress.toLowerCase();
-                return (
-                  <div
-                    key={lob.position}
-                    className={`lobster-card ${isOwn ? "lobster-own" : ""} ${i === 0 ? "lobster-newest" : ""}`}
-                  >
-                    <span className="lobster-emoji">🦞</span>
-                    <span className="lobster-position">#{lob.position}</span>
-                    <span className="lobster-address">
-                      <Address address={lob.owner} />
-                    </span>
-                    <span className="lobster-earnings">{formatClawd(lob.unclaimed)} CLAWD</span>
+              <div className="tower-display">
+                {Array.from({ length: Math.min(stats.height, 30) }).map((_, i) => {
+                  const pos = stats.height - i;
+                  return (
+                    <div
+                      key={i}
+                      className={`lobster-card ${i === 0 ? "lobster-newest" : ""}`}
+                      style={{ animationDelay: `${i * 0.05}s` }}
+                    >
+                      <span className="lobster-emoji">🦞</span>
+                      <span className="lobster-position">#{pos}</span>
+                    </div>
+                  );
+                })}
+                {stats.height > 30 && (
+                  <div className="lobster-card lobster-more">
+                    <span>... {stats.height - 30} more below ...</span>
                   </div>
-                );
-              })
+                )}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Right: Action + User panels */}
+        {/* Right: Action + Panels */}
         <div className="action-section">
           {/* Action Panel */}
           <div className="panel action-panel">
-            <h2 className="section-title">Enter the Stack</h2>
+            <h2 className="section-title">Stack a Lobster</h2>
 
-            {connectedAddress && <div className="balance-display">Balance: {formatClawdFull(clawdBalance)} CLAWD {formatUsd(clawdBalance, clawdPrice)}</div>}
+            <div className="entry-cost-display">
+              <span className="entry-cost-label">Entry Cost:</span>
+              <span className="entry-cost-value">{formatClawdFull(entryCost)} CLAWD {formatUsd(entryCost, clawdPrice)}</span>
+            </div>
+
+            {connectedAddress && (
+              <div className="balance-display">
+                Balance: {formatClawdFull(clawdBalance)} CLAWD {formatUsd(clawdBalance, clawdPrice)}
+              </div>
+            )}
 
             {!connectedAddress ? (
-              <button
-                className="btn-action btn-enter"
-                onClick={openConnectModal}
-              >
-                Connect Wallet to Enter 🦞
+              <button className="btn-action btn-enter" onClick={openConnectModal}>
+                Connect Wallet to Stack 🦞
               </button>
             ) : isWrongNetwork ? (
               <button
@@ -313,45 +406,24 @@ export default function LobsterStackPage() {
                 disabled={isSwitching || isAnyMining}
                 onClick={async () => {
                   setIsSwitching(true);
-                  try {
-                    await switchChainAsync({ chainId: targetNetwork.id });
-                  } catch (e) {
-                    console.error("Switch failed:", e);
-                  } finally {
-                    setIsSwitching(false);
-                  }
+                  try { await switchChainAsync({ chainId: targetNetwork.id }); }
+                  catch (e) { console.error("Switch failed:", e); }
+                  finally { setIsSwitching(false); }
                 }}
               >
-                {isSwitching ? (
-                  <>
-                    <span className="spinner" /> Switching...
-                  </>
-                ) : (
-                  `Switch to ${targetNetwork.name}`
-                )}
+                {isSwitching ? (<><span className="spinner" /> Switching...</>) : `Switch to ${targetNetwork.name}`}
               </button>
             ) : !hasEnoughBalance ? (
               <div className="no-balance">
-                <p>You need {formatClawd(entryCost)} CLAWD {formatUsd(entryCost, clawdPrice)} to enter</p>
-                {targetNetwork.id === 31337 && (
-                  <button
-                    className="btn-action btn-mint"
-                    disabled={isMinting || isAnyMining}
-                    onClick={handleMintTestTokens}
-                  >
-                    {isMinting ? "Minting..." : "Mint 10M Test CLAWD"}
-                  </button>
-                )}
-                {targetNetwork.id !== 31337 && (
-                  <a
-                    href="https://app.uniswap.org/swap?outputCurrency=0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07&chain=base"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-action btn-mint"
-                  >
-                    Get $CLAWD on Uniswap ↗
-                  </a>
-                )}
+                <p>You need {formatClawd(entryCost)} CLAWD to enter</p>
+                <a
+                  href="https://app.uniswap.org/swap?outputCurrency=0x9f86dB9fc6f7c9408e8Fda3Ff8ce4e78ac7a6b07&chain=base"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-action btn-mint"
+                >
+                  Get $CLAWD on Uniswap ↗
+                </a>
               </div>
             ) : !hasEnoughAllowance ? (
               <button
@@ -359,41 +431,66 @@ export default function LobsterStackPage() {
                 disabled={isApproving || approveDisableTimer || isAnyMining}
                 onClick={handleApprove}
               >
-                {isApproving ? (
-                  <>
-                    <span className="spinner" /> Approving...
-                  </>
-                ) : (
-                  `Approve ${formatClawd(entryCost)} CLAWD`
-                )}
+                {isApproving ? (<><span className="spinner" /> Approving...</>) : `Approve ${formatClawd(entryCost)} CLAWD`}
               </button>
             ) : (
               <button
                 className="btn-action btn-enter"
-                disabled={isEntering || enterDisableTimer || isAnyMining}
-                onClick={handleEnterStack}
+                disabled={isEntering || enterDisableTimer || isAnyMining || isCheckingTopple}
+                onClick={handleEnterTower}
               >
-                {isEntering ? (
-                  <>
-                    <span className="spinner" /> Entering...
-                  </>
-                ) : (
-                  "Enter the Stack 🦞"
-                )}
+                {isEntering ? (<><span className="spinner" /> Stacking...</>) :
+                 isCheckingTopple ? (<><span className="spinner" /> Checking for topple...</>) :
+                 "Stack a Lobster 🦞"}
               </button>
             )}
 
             <div className="distribution-info">
-              <span>60% to stack</span>
-              <span>20% burned</span>
-              <span>20% instant reward</span>
+              <span>80% to tower</span>
+              <span>10% burned</span>
+              <span>10% topple pot</span>
             </div>
+
+            {/* Topple Check Result */}
+            {toppleCheckResult && (
+              <div className={`topple-result ${toppleCheckResult.winner ? "topple-winner" : "topple-safe"}`}>
+                {toppleCheckResult.winner ? (
+                  <>
+                    <div className="topple-result-title">🎉 YOU CAN TOPPLE! 🎉</div>
+                    <div className="topple-result-detail">
+                      Roll: {toppleCheckResult.roll}/69 — YOU WIN THE POT!
+                    </div>
+                    <div className="topple-result-pot">
+                      Pot: {formatClawdFull(stats.pot)} CLAWD {formatUsd(stats.pot, clawdPrice)}
+                    </div>
+                    <button
+                      className="btn-action btn-topple"
+                      disabled={isToppling}
+                      onClick={handleTopple}
+                    >
+                      {isToppling ? (<><span className="spinner" /> Toppling...</>) : "🌊 TOPPLE THE TOWER 🌊"}
+                    </button>
+                    <div className="topple-result-warning">
+                      ⏰ {toppleCheckResult.blocksLeft} blocks left to topple!
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="topple-result-title">Tower stands! 🏗️</div>
+                    <div className="topple-result-detail">
+                      Roll: {toppleCheckResult.roll}/69 — needed 0 to topple
+                    </div>
+                    <div className="topple-result-sub">Your lobster is earning from future entries 💰</div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* User Positions */}
           {connectedAddress && userPositions && userPositions.length > 0 && (
             <div className="panel positions-panel">
-              <h2 className="section-title">Your Positions</h2>
+              <h2 className="section-title">Your Lobsters</h2>
               <div className="unclaimed-total">
                 <span className="unclaimed-label">Unclaimed Earnings</span>
                 <span className="unclaimed-value">{formatClawdFull(unclaimedEarnings)} CLAWD {formatUsd(unclaimedEarnings, clawdPrice)}</span>
@@ -411,30 +508,40 @@ export default function LobsterStackPage() {
                   disabled={isClaiming || claimDisableTimer || isAnyMining}
                   onClick={handleClaim}
                 >
-                  {isClaiming ? (
-                    <>
-                      <span className="spinner" /> Claiming...
-                    </>
-                  ) : (
-                    `Claim ${formatClawdFull(unclaimedEarnings)} CLAWD`
-                  )}
+                  {isClaiming ? (<><span className="spinner" /> Claiming...</>) : `Claim ${formatClawdFull(unclaimedEarnings)} CLAWD`}
                 </button>
               )}
+            </div>
+          )}
+
+          {/* Recent Topples */}
+          {recentTopples.length > 0 && (
+            <div className="panel activity-panel">
+              <h2 className="section-title">Recent Topples 🌊</h2>
+              <div className="activity-list">
+                {recentTopples.map((event, i) => (
+                  <div key={i} className="activity-item topple-event">
+                    <span>💥</span>
+                    <Address address={event.args.toppler as `0x${string}`} />
+                    <span>won {formatClawd(event.args.potWon as bigint)} CLAWD (round {Number(event.args.round)})</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Recent Activity */}
           <div className="panel activity-panel">
             <h2 className="section-title">Recent Activity</h2>
-            {recentEvents.length === 0 ? (
+            {recentEntries.length === 0 ? (
               <p className="no-activity">No entries yet</p>
             ) : (
               <div className="activity-list">
-                {recentEvents.map((event, i) => (
+                {recentEntries.map((event, i) => (
                   <div key={i} className="activity-item">
                     <span>🦞</span>
                     <Address address={event.args.owner as `0x${string}`} />
-                    <span>entered at #{Number(event.args.position)}</span>
+                    <span>stacked #{Number(event.args.positionId)}</span>
                   </div>
                 ))}
               </div>
@@ -445,12 +552,13 @@ export default function LobsterStackPage() {
           <div className="panel info-panel">
             <h2 className="section-title">How It Works</h2>
             <ol className="how-it-works">
-              <li>Pay CLAWD to enter the stack</li>
-              <li>60% of each new entry goes to existing lobsters</li>
-              <li>20% is burned forever 🔥</li>
-              <li>20% comes back to you instantly as a welcome reward</li>
-              <li>Earlier positions earn from every future entry</li>
-              <li>Claim your earnings anytime</li>
+              <li>Pay {formatClawd(entryCost)} CLAWD to stack a lobster on the tower</li>
+              <li>80% goes to existing lobsters in the tower 💰</li>
+              <li>10% is burned forever 🔥</li>
+              <li>10% goes to the topple pot 💣</li>
+              <li>Each entry has a <strong>1-in-69</strong> chance to topple the tower</li>
+              <li>If you topple it — you win the entire pot! 🌊</li>
+              <li>Tower resets. Your earned rewards are still claimable.</li>
             </ol>
           </div>
         </div>

@@ -2,11 +2,11 @@
 pragma solidity ^0.8.19;
 
 import "./DeployHelpers.s.sol";
-import { DeployLobsterStack } from "./DeployLobsterStack.s.sol";
+import { DeployLobsterTower } from "./DeployLobsterTower.s.sol";
 
 contract DeployScript is ScaffoldETHDeploy {
     function run() external {
-        DeployLobsterStack deployLobsterStack = new DeployLobsterStack();
-        deployLobsterStack.run();
+        DeployLobsterTower deployLobsterTower = new DeployLobsterTower();
+        deployLobsterTower.run();
     }
 }

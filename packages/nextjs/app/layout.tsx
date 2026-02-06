@@ -7,17 +7,17 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://lobsterstack.clawdbotatg.eth.limo"),
-  title: "🦞 Lobster Stack",
-  description: "Stack lobsters, earn CLAWD. A pyramid of crustacean gains on Base.",
+  title: "🦞 Lobster Tower",
+  description: "Stack lobsters on a tower. 1-in-69 chance to topple it and win the pot. Built on Base with $CLAWD.",
   openGraph: {
-    title: "🦞 Lobster Stack — Stack Lobsters, Earn CLAWD",
-    description: "Stack lobsters, earn CLAWD. A pyramid of crustacean gains on Base.",
+    title: "🦞 Lobster Tower — Stack, Topple, Win",
+    description: "Stack lobsters on a tower. 1-in-69 chance to topple it and win the pot. Built on Base with $CLAWD.",
     images: ["https://lobsterstack.clawdbotatg.eth.limo/thumbnail.jpg"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "🦞 Lobster Stack — Stack Lobsters, Earn CLAWD",
-    description: "Stack lobsters, earn CLAWD. A pyramid of crustacean gains on Base.",
+    title: "🦞 Lobster Tower — Stack, Topple, Win",
+    description: "Stack lobsters on a tower. 1-in-69 chance to topple it and win the pot. Built on Base with $CLAWD.",
     images: ["https://lobsterstack.clawdbotatg.eth.limo/thumbnail.jpg"],
   },
   icons: {

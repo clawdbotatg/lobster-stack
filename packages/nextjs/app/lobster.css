@@ -374,6 +374,187 @@
   border-bottom: 1px solid rgba(255, 107, 107, 0.05);
 }
 
+/* ============ Topple Result ============ */
+
+.topple-result {
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.topple-winner {
+  background: rgba(57, 255, 20, 0.1);
+  border: 2px solid #39ff14;
+  animation: winnerPulse 1s ease-in-out infinite;
+}
+
+@keyframes winnerPulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(57, 255, 20, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(57, 255, 20, 0.6); }
+}
+
+.topple-safe {
+  background: rgba(255, 107, 107, 0.05);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+}
+
+.topple-result-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.topple-winner .topple-result-title {
+  color: #39ff14;
+}
+
+.topple-safe .topple-result-title {
+  color: #ff6b6b;
+}
+
+.topple-result-detail {
+  font-family: 'Courier New', monospace;
+  color: #aaa;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.topple-result-pot {
+  font-family: 'Courier New', monospace;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #ffd700;
+  margin-bottom: 1rem;
+}
+
+.topple-result-sub {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.topple-result-warning {
+  color: #ff6b6b;
+  font-size: 0.8rem;
+  margin-top: 0.75rem;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.btn-topple {
+  background: linear-gradient(135deg, #00bfff 0%, #0080ff 100%);
+  color: white;
+  font-size: 1.2rem;
+  padding: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.btn-topple:not(:disabled):hover {
+  box-shadow: 0 0 25px rgba(0, 191, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+/* ============ Topple Overlay ============ */
+
+.topple-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: overlayFade 5s ease forwards;
+}
+
+@keyframes overlayFade {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; pointer-events: none; }
+}
+
+.topple-text {
+  font-size: 3rem;
+  font-weight: 900;
+  color: #00bfff;
+  text-shadow: 0 0 30px rgba(0, 191, 255, 0.8);
+  animation: toppleShake 0.5s ease-in-out infinite;
+}
+
+@keyframes toppleShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px) rotate(-2deg); }
+  75% { transform: translateX(5px) rotate(2deg); }
+}
+
+.topple-lobsters {
+  font-size: 2rem;
+  margin-top: 1rem;
+  animation: lobsterFall 1s ease-in-out infinite;
+}
+
+@keyframes lobsterFall {
+  0% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(20px) rotate(10deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+
+/* ============ Topple Event in Activity ============ */
+
+.topple-event {
+  background: rgba(0, 191, 255, 0.05);
+  border: 1px solid rgba(0, 191, 255, 0.2);
+  border-radius: 6px;
+  padding: 0.75rem !important;
+}
+
+/* ============ Entry Cost Display ============ */
+
+.entry-cost-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 107, 107, 0.05);
+  border-radius: 6px;
+}
+
+.entry-cost-label {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.entry-cost-value {
+  font-family: 'Courier New', monospace;
+  color: #ff6b6b;
+  font-weight: 700;
+}
+
+/* ============ Tower Display ============ */
+
+.tower-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.lobster-more {
+  text-align: center;
+  color: #666;
+  font-size: 0.85rem;
+  border-style: dashed;
+}
+
 /* ============ Info Panel ============ */
 
 .how-it-works {

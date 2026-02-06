@@ -28,8 +28,8 @@ contract LobsterStack is Ownable, ReentrancyGuard {
     uint256 public entryCost;
     uint256 public participantBps; // e.g., 6000 = 60%
     uint256 public burnBps;        // e.g., 2000 = 20%
-    uint256 public treasuryBps;    // e.g., 1500 = 15%
-    // Remaining = rewardPool BPS: BPS_DENOMINATOR - participantBps - burnBps - treasuryBps
+    uint256 public instantRewardBps; // e.g., 1500 = 15% — sent back to entrant immediately
+    // Remaining = rewardPool BPS: BPS_DENOMINATOR - participantBps - burnBps - instantRewardBps
 
     // ============ Stack State ============
     uint256 public totalLobsters;
@@ -58,7 +58,7 @@ contract LobsterStack is Ownable, ReentrancyGuard {
     event LobsterEntered(uint256 indexed position, address indexed owner, uint256 cost);
     event EarningsClaimed(address indexed user, uint256 amount);
     event EntryCostUpdated(uint256 oldCost, uint256 newCost);
-    event DistributionUpdated(uint256 participantBps, uint256 burnBps, uint256 treasuryBps);
+    event DistributionUpdated(uint256 participantBps, uint256 burnBps, uint256 instantRewardBps);
     event PauseUpdated(bool paused);
     event RewardPoolWithdrawn(address indexed to, uint256 amount);
 
@@ -75,12 +75,12 @@ contract LobsterStack is Ownable, ReentrancyGuard {
         uint256 _entryCost,
         uint256 _participantBps,
         uint256 _burnBps,
-        uint256 _treasuryBps
+        uint256 _instantRewardBps
     ) Ownable(msg.sender) {
         require(_clawdToken != address(0), "Invalid token");
         require(_treasury != address(0), "Invalid treasury");
         require(
-            _participantBps + _burnBps + _treasuryBps <= BPS_DENOMINATOR,
+            _participantBps + _burnBps + _instantRewardBps <= BPS_DENOMINATOR,
             "BPS exceeds 100%"
         );
 
@@ -89,7 +89,7 @@ contract LobsterStack is Ownable, ReentrancyGuard {
         entryCost = _entryCost;
         participantBps = _participantBps;
         burnBps = _burnBps;
-        treasuryBps = _treasuryBps;
+        instantRewardBps = _instantRewardBps;
     }
 
     // ============ User Functions ============
@@ -107,8 +107,8 @@ contract LobsterStack is Ownable, ReentrancyGuard {
         // 2. Calculate splits
         uint256 participantShare = (entryCost * participantBps) / BPS_DENOMINATOR;
         uint256 burnAmount = (entryCost * burnBps) / BPS_DENOMINATOR;
-        uint256 treasuryAmount = (entryCost * treasuryBps) / BPS_DENOMINATOR;
-        uint256 poolAmount = entryCost - participantShare - burnAmount - treasuryAmount;
+        uint256 instantReward = (entryCost * instantRewardBps) / BPS_DENOMINATOR;
+        uint256 poolAmount = entryCost - participantShare - burnAmount - instantReward;
 
         // 3. Update accumulator for earlier participants (Masterchef pattern)
         if (totalLobsters > 0) {
@@ -125,9 +125,9 @@ contract LobsterStack is Ownable, ReentrancyGuard {
             totalBurned += burnAmount;
         }
 
-        // 5. Treasury
-        if (treasuryAmount > 0) {
-            clawdToken.safeTransfer(treasury, treasuryAmount);
+        // 5. Instant reward — sent back to the entrant immediately
+        if (instantReward > 0) {
+            clawdToken.safeTransfer(msg.sender, instantReward);
         }
 
         // 6. Reward pool
@@ -294,16 +294,16 @@ contract LobsterStack is Ownable, ReentrancyGuard {
     function setDistribution(
         uint256 _participantBps,
         uint256 _burnBps,
-        uint256 _treasuryBps
+        uint256 _instantRewardBps
     ) external onlyOwner {
         require(
-            _participantBps + _burnBps + _treasuryBps <= BPS_DENOMINATOR,
+            _participantBps + _burnBps + _instantRewardBps <= BPS_DENOMINATOR,
             "BPS exceeds 100%"
         );
         participantBps = _participantBps;
         burnBps = _burnBps;
-        treasuryBps = _treasuryBps;
-        emit DistributionUpdated(_participantBps, _burnBps, _treasuryBps);
+        instantRewardBps = _instantRewardBps;
+        emit DistributionUpdated(_participantBps, _burnBps, _instantRewardBps);
     }
 
     /**

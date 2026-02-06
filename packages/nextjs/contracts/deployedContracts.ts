@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   8453: {
     LobsterStack: {
-      address: "0x656def27004f0c563adba9f4d02ab22583601e1c",
+      address: "0xe4d3C794424c8582D1394F5947C19f292307a1dB",
       abi: [
         {
           type: "constructor",
@@ -38,7 +38,7 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "_treasuryBps",
+              name: "_instantRewardBps",
               type: "uint256",
               internalType: "uint256",
             },
@@ -413,7 +413,7 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "_treasuryBps",
+              name: "_instantRewardBps",
               type: "uint256",
               internalType: "uint256",
             },
@@ -514,7 +514,7 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "treasuryBps",
+          name: "instantRewardBps",
           inputs: [],
           outputs: [
             {
@@ -579,7 +579,7 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "treasuryBps",
+              name: "instantRewardBps",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
@@ -1115,7 +1115,7 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "_treasuryBps",
+              name: "_instantRewardBps",
               type: "uint256",
               internalType: "uint256",
             },
@@ -1490,7 +1490,7 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "_treasuryBps",
+              name: "_instantRewardBps",
               type: "uint256",
               internalType: "uint256",
             },
@@ -1591,7 +1591,7 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "treasuryBps",
+          name: "instantRewardBps",
           inputs: [],
           outputs: [
             {
@@ -1656,7 +1656,7 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "treasuryBps",
+              name: "instantRewardBps",
               type: "uint256",
               indexed: false,
               internalType: "uint256",

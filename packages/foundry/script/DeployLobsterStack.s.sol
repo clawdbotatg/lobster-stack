@@ -12,8 +12,8 @@ contract DeployLobsterStack is ScaffoldETHDeploy {
     uint256 constant ENTRY_COST = 500_000 * 1e18; // 500K CLAWD
     uint256 constant PARTICIPANT_BPS = 6000;       // 60%
     uint256 constant BURN_BPS = 2000;              // 20%
-    uint256 constant TREASURY_BPS = 1500;          // 15%
-    // Remaining 500 BPS (5%) = reward pool
+    uint256 constant INSTANT_REWARD_BPS = 2000;    // 20%
+    // 60 + 20 + 20 = 100% — no pool
 
     function run() external ScaffoldEthDeployerRunner {
         if (block.chainid == 31337) {
@@ -27,7 +27,7 @@ contract DeployLobsterStack is ScaffoldETHDeploy {
                 ENTRY_COST,
                 PARTICIPANT_BPS,
                 BURN_BPS,
-                TREASURY_BPS
+                INSTANT_REWARD_BPS
             );
             console.log("LobsterStack deployed at:", address(stack));
 
@@ -46,7 +46,7 @@ contract DeployLobsterStack is ScaffoldETHDeploy {
                 ENTRY_COST,
                 PARTICIPANT_BPS,
                 BURN_BPS,
-                TREASURY_BPS
+                INSTANT_REWARD_BPS
             );
             console.log("LobsterStack deployed at:", address(stack));
 

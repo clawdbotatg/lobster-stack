@@ -100,7 +100,7 @@ export default function LobsterStackPage() {
   const { data: entryEvents } = useScaffoldEventHistory({
     contractName: "LobsterStack",
     eventName: "LobsterEntered",
-    fromBlock: 41775600n,
+    fromBlock: 41775750n,
     watch: true,
   });
 
@@ -259,10 +259,6 @@ export default function LobsterStackPage() {
           <div className="stat-value">{formatClawd(stats.entryCost)}</div>
           <div className="stat-label">🎟️ Entry Cost</div>
         </div>
-        <div className="stat-item">
-          <div className="stat-value stat-gold">{formatClawd(stats.rewardPool)}</div>
-          <div className="stat-label">🏆 Pool</div>
-        </div>
       </div>
 
       <div className="main-content">
@@ -390,8 +386,7 @@ export default function LobsterStackPage() {
             <div className="distribution-info">
               <span>60% to stack</span>
               <span>20% burned</span>
-              <span>15% instant reward</span>
-              <span>5% pool</span>
+              <span>20% instant reward</span>
             </div>
           </div>
 
@@ -453,7 +448,7 @@ export default function LobsterStackPage() {
               <li>Pay CLAWD to enter the stack</li>
               <li>60% of each new entry goes to existing lobsters</li>
               <li>20% is burned forever 🔥</li>
-              <li>15% comes back to you instantly as a welcome reward</li>
+              <li>20% comes back to you instantly as a welcome reward</li>
               <li>Earlier positions earn from every future entry</li>
               <li>Claim your earnings anytime</li>
             </ol>

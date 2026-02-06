@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   8453: {
     LobsterStack: {
-      address: "0xe4d3C794424c8582D1394F5947C19f292307a1dB",
+      address: "0xbe05E928eC71B9830BEe5B664444a5C5801e57C3",
       abi: [
         {
           type: "constructor",

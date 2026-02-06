@@ -22,3 +22,5 @@ node_modules
 # cli
 dist
 .env.local
+scripts/test-accounts.env
+*.env.local

@@ -5,6 +5,7 @@ import "./lobster.css";
 import { Address } from "@scaffold-ui/components";
 import { formatUnits } from "viem";
 import { base } from "viem/chains";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useAccount, useSwitchChain } from "wagmi";
 import { useScaffoldEventHistory, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import scaffoldConfig from "~~/scaffold.config";
@@ -34,6 +35,7 @@ function formatUsd(clawd: bigint | undefined, price: number | null): string {
 export default function LobsterStackPage() {
   const { address: connectedAddress, chain } = useAccount();
   const { switchChainAsync } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
   const targetNetwork = scaffoldConfig.targetNetworks[0];
   const isWrongNetwork = connectedAddress && chain && chain.id !== targetNetwork.id;
   const [isSwitching, setIsSwitching] = useState(false);
@@ -303,7 +305,12 @@ export default function LobsterStackPage() {
             {connectedAddress && <div className="balance-display">Balance: {formatClawdFull(clawdBalance)} CLAWD {formatUsd(clawdBalance, clawdPrice)}</div>}
 
             {!connectedAddress ? (
-              <p className="connect-prompt">Connect your wallet to enter</p>
+              <button
+                className="btn-action btn-enter"
+                onClick={openConnectModal}
+              >
+                Connect Wallet to Enter 🦞
+              </button>
             ) : isWrongNetwork ? (
               <button
                 className="btn-action btn-enter"
